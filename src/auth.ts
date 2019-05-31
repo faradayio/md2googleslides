@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import Debug from 'debug';
-import { OAuth2Client, Credentials } from 'google-auth-library';
+import { OAuth2Client, Credentials, JWT } from 'google-auth-library';
 import path from 'path';
 import mkdirp from 'mkdirp';
 import lowdb from 'lowdb';
@@ -85,6 +85,18 @@ export default class UserAuthorizer {
      * @returns {Promise.<google.auth.OAuth2>}
      */
     public async getUserCredentials(user: string, scopes: string): Promise<OAuth2Client> {
+        const clientEmail = this.db.get('client_email').value();
+        const privateKey = this.db.get('private_key').value();
+        if (clientEmail && privateKey) {
+          const client = new JWT(
+            clientEmail,
+            null,
+            privateKey,
+            scopes
+          )
+          return client
+        }
+
         const oauth2Client = new OAuth2Client(this.clientId, this.clientSecret, this.redirectUrl);
         oauth2Client.on('tokens', (tokens: Credentials) => {
             if (tokens.refresh_token) {

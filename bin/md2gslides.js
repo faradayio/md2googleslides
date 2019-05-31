@@ -26,11 +26,13 @@ const UserAuthorizer = require('../lib/auth').default;
 const SlideGenerator = require('../lib/slide_generator').default;
 const opener = require('opener');
 const readline = require('readline');
+const { google } = require('googleapis');
 
 const SCOPES = ['https://www.googleapis.com/auth/presentations', 'https://www.googleapis.com/auth/drive'];
 
 const USER_HOME = process.env.HOME || process.env.HOMEPATH || process.env.USERPROFILE;
-const STORED_CREDENTIALS_PATH = path.join(USER_HOME, '.md2googleslides', 'credentials.json');
+const STORED_CREDENTIALS_PATH =
+    process.env.GOOGLE_APPLICATION_CREDENTIALS || path.join(USER_HOME, '.md2googleslides', 'credentials.json');
 
 var parser = new ArgumentParser({
     version: '1.0.0',
@@ -191,9 +193,22 @@ function displayResults(id) {
         opener(url);
     }
 }
-authorizeUser()
-    .then(buildSlideGenerator)
-    .then(eraseIfNeeded)
-    .then(generateSlides)
-    .then(displayResults)
-    .catch(handleError);
+
+(async function main() {
+    const authClient = await authorizeUser();
+    const slideGenerator = await buildSlideGenerator(authClient);
+    await eraseIfNeeded(slideGenerator);
+    await generateSlides(slideGenerator);
+    const drive = google.drive({ version: 'v3', auth: authClient });
+    await drive.permissions.create({
+        fileId: slideGenerator.presentation.presentationId,
+        sendNotificationEmail: false,
+        resource: {
+            role: 'writer',
+            type: 'domain',
+            domain: 'faraday.io',
+            allowFileDiscovery: false,
+        },
+    });
+    await displayResults(slideGenerator.presentation.presentationId);
+})().catch(handleError);
